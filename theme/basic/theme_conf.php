@@ -31,7 +31,7 @@ define('MSG004', "異常です[Abnormality]");
 define('MSG005', "ログの読み込みに失敗しました[It failed in reading the log.]");
 define('MSG006', "削除に失敗しました(ユーザー)[failed in deletion.(User)]");
 define('MSG007', "削除に失敗しました(管理者)[failed in deletion.(Admin)]");
-define('MSG008', "該当ファイルが見つからないかパスワードが間違っています[article is not found or password is wrong.]");
+define('MSG008', "該当ファイルが見つからないか、パスワードが間違っています[article is not found or password is wrong.]");
 define('MSG009', "パスワードが違います[password is wrong.]");
 define('MSG010', "ファイルNoが未入力です[Please input No.]");
 define('MSG011', "拒絶されました[was rejected.]<br>不正な文字列があります[illegal character string.]");
