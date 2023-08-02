@@ -68,6 +68,11 @@ init();
 
 deltemp();
 
+$pwdc = filter_input(INPUT_COOKIE, 'pwdc');
+
+$req_method = isset($_SERVER["REQUEST_METHOD"]) ? $_SERVER["REQUEST_METHOD"] : "";
+//INPUT_SERVER が動作しないサーバがあるので$_SERVERを使う。
+
 //ユーザーip
 function get_uip()
 {
@@ -83,26 +88,24 @@ function get_uip()
 }
 
 //csrfトークンを作成
-function get_csrf_token()
-{
-	if (!isset($_SESSION)) {
-		session_save_path(__DIR__ . '/session/');
-		session_start();
-	}
-	header('Expires:');
-	header('Cache-Control:');
-	header('Pragma:');
-	return hash('sha256', session_id(), false);
+function get_csrf_token(){
+	session_sta();
+	$token = hash('sha256', session_id(), false);
+	$_SESSION['token'] = $token;
+
+	return $token;
 }
-//csrfトークンをチェック
-function check_csrf_token()
-{
-	session_save_path(__DIR__ . '/session/');
-	session_start();
-	$token = filter_input(INPUT_POST, 'token');
-	$session_token = isset($_SESSION['token']) ? $_SESSION['token'] : '';
-	if (!$session_token || $token !== $session_token) {
-		error(MSG006);
+//csrfトークンをチェック	
+function check_csrf_token(){
+	if(($_SERVER["REQUEST_METHOD"]) !== "POST"){
+		return error('失敗しました。[This operation has failed.]');
+	} 
+	check_same_origin();
+	session_sta();
+	$token=(string)filter_input(INPUT_POST,'token');
+	$session_token=isset($_SESSION['token']) ? (string)$_SESSION['token'] : '';
+	if(!$session_token||$token!==$session_token){
+		return error("CSRFトークンが一致しません。\nリロードしてください。[CSRF token mismatch.\nPlease reload.]");
 	}
 }
 
@@ -195,6 +198,25 @@ function deltemp()
 	closedir($handle);
 }
 
+//書き込み
+function regist(){
+  global $admin_pass,$req_method,$dat;
+
+  //CSRFトークンをチェック
+	if (CHECK_CSRF_TOKEN) {
+		check_csrf_token();
+	}
+
+  $upfile = filter_input(INPUT_POST, 'upfile');
+  $comment = (string)filter_input(INPUT_POST, 'comment');
+  $pwd = (string)trim(filter_input(INPUT_POST, 'pwd'));
+	$pwdh = password_hash($pwd, PASSWORD_DEFAULT);
+
+  if ($req_method !== "POST") {
+		error("不正な投稿です。[Please do not do an illegal contribution.]<br>POST以外での投稿は受け付けません。[The contribution excluding 'POST' is not accepted.]");
+	}
+}
+
 //ログの行数が最大値を超えていたら削除
 function logdel()
 {
@@ -239,6 +261,67 @@ function tobr($com)
 		$com = nl2br($com);
 	}
 	return $com;
+}
+
+//sessionの確認
+function adminpost_valid(){
+	global $second_pass;
+	session_sta();
+	return isset($_SESSION['adminpost'])&&($second_pass && $_SESSION['adminpost']===$second_pass);
+}
+function admindel_valid(){
+	global $second_pass;
+	session_sta();
+	return isset($_SESSION['admindel'])&&($second_pass && $_SESSION['admindel']===$second_pass);
+}
+
+//session開始
+function session_sta(){
+	if(!isset($_SESSION)){
+		ini_set('session.use_strict_mode', 1);
+		session_set_cookie_params(
+			0,"","",false,true
+		);
+		session_start();
+		header('Expires:');
+		header('Cache-Control:');
+		header('Pragma:');
+	}
+}
+
+function check_same_origin(){
+	if(!isset($_SERVER['HTTP_ORIGIN']) || !isset($_SERVER['HTTP_HOST'])){
+		return error("お使いのブラウザはサポートされていません。[Your browser is not supported. ]");
+	}
+	if(parse_url($_SERVER['HTTP_ORIGIN'], PHP_URL_HOST) !== $_SERVER['HTTP_HOST']){
+		return error("拒絶されました。[The post has been rejected.]");
+	}
+}
+
+function check_open_no($no){
+	global $en;
+	if($no && !is_numeric($no)){
+		return error("失敗しました。[This operation has failed.]");
+	}
+}
+
+//Asyncリクエストの時は処理を中断
+function check_AsyncRequest($upfile='') {
+	//ヘッダーが確認できなかった時の保険
+	$asyncflag = (bool)filter_input(INPUT_POST,'asyncflag',FILTER_VALIDATE_BOOLEAN);
+	$http_x_requested_with= (bool)(isset($_SERVER['HTTP_X_REQUESTED_WITH']));
+	if($http_x_requested_with || $asyncflag){ //非同期通信ならエラーチェックだけすませて処理中断。通常フォームでやりなおし。
+		safe_unlink($upfile);
+		exit;
+	}
+}
+
+//ファイルがあれば削除
+function safe_unlink ($path) {
+	if ($path && is_file($path)) {
+		return unlink($path);
+	}
+	return false;
 }
 
 /* エスケープ */
