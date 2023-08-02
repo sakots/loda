@@ -36,8 +36,8 @@ $blade->pipeEnable = true; // パイプのフィルターを使えるように�
 
 $dat = array(); // bladeに格納する変数
 
-// jQueryバージョン
-define('JQUERY','jquery-3.7.0.min.js');
+// jQuery
+const JQUERY='jquery-3.7.0.min.js';
 
 //絶対パス取得
 $path = realpath("./").'/'.'data/';
@@ -49,7 +49,7 @@ define('TMP_PATH', $temppath);
 $self = PHP_SELF;
 
 $dat['ver'] = LODA_VER;
-$dat['btitle'] = TITLE;
+$dat['title'] = TITLE;
 $dat['self'] = PHP_SELF;
 
 $dat['themedir'] = THEMEDIR;
@@ -137,15 +137,22 @@ exit;
 function init()
 {
 	try {
-		if (!is_file(DB_NAME . '.db')) {
 			// はじめての実行なら、テーブルを作成
-			// id, 投稿日時, オリジナルファイル名, ファイルサイズ
+			// id, 投稿日時, アップロード前ファイル名, アップロード後ファイル名, コメント, ファイルサイズ, DL/再生カウント, 削除キー
 			$db = new PDO(DB_PDO);
 			$db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-			$sql = "CREATE TABLE tlog (tid integer primary key autoincrement, created TIMESTAMP, origin text, size )";
+			$sql = "CREATE TABLE IF NOT EXISTS up (
+        tid integer primary key autoincrement,
+        created TIMESTAMP,
+        origin_file_name text,
+        file_name text,
+        comment text,
+        size integer,
+        count integer,
+        del_key text
+        )";
 			$db = $db->query($sql);
 			$db = null; //db切断
-		}
 	} catch (PDOException $e) {
 		echo "DB接続エラー:" . $e->getMessage();
 	}
@@ -171,4 +178,89 @@ function init()
 	if (!is_writable('tmp/')) $err .= 'tmp/' . "を書けません<br>";
 	if (!is_readable('tmp/')) $err .= 'tmp/' . "を読めません<br>";
 	if ($err) error($err);
+}
+
+/* テンポラリ内のゴミ除去 */
+function deltemp()
+{
+	$handle = opendir('tmp/');
+	while ($file = readdir($handle)) {
+		if (!is_dir($file)) {
+			$lapse = time() - filemtime('tmp/' . $file);
+			if ($lapse > (7 * 24 * 3600)) { //7日間
+				unlink('tmp/' . $file);
+			}
+		}
+	}
+	closedir($handle);
+}
+
+//ログの行数が最大値を超えていたら削除
+function logdel()
+{
+	//オーバーした行の画像とスレ番号を取得
+	try {
+		$db = new PDO(DB_PDO);
+		$sql_del = "SELECT * FROM up ORDER BY tid LIMIT 1";
+		$msgs = $db->prepare($sql_del);
+		$msgs->execute();
+		$msg = $msgs->fetch();
+
+		$del_tid = (int)$msg["tid"]; //消す行のスレ番号
+		$msgfile = $msg["filename"]; //ファイルの名前取得できた
+		//削除処理
+		if (is_file('data/' . $msgfile)) {
+      $ext = substr( $msgfile, strrpos( $msgfile, '.') + 1);
+			$msgdat = pathinfo($msgfile, PATHINFO_FILENAME); //拡張子除去
+			if (is_file('data/'. $msgdat . $ext)) {
+				unlink('data/' . $msgdat . $ext);
+			}
+		}
+
+		//sql削除
+		$delths = "DELETE FROM up WHERE tid = $del_tid";
+		$db->exec($delths);
+
+		$sql_del = null;
+		$msg = null;
+		$del_tid = null;
+		$db = null; //db切断
+	} catch (PDOException $e) {
+		echo "DB接続エラー:" . $e->getMessage();
+	}
+}
+
+/* 改行を<br>に */
+function tobr($com)
+{
+	if (TH_XHTML !== 1) {
+		$com = nl2br($com, false);
+	} else {
+		$com = nl2br($com);
+	}
+	return $com;
+}
+
+/* エスケープ */
+function h($str){
+	if($str===0 || $str==='0'){
+		return '0';
+	}
+	if(!$str){
+		return '';
+	}
+	return htmlspecialchars($str,ENT_QUOTES,"utf-8",false);
+}
+
+/* エラー */
+function error($str,$historyback=true){
+	global $blade,$dat;
+
+	$asyncflag = (bool)filter_input(INPUT_POST,'asyncflag',FILTER_VALIDATE_BOOLEAN);
+	$http_x_requested_with= (bool)(isset($_SERVER['HTTP_X_REQUESTED_WITH']));
+	if($http_x_requested_with||$asyncflag){
+		return die(h("error\n{$str}"));
+	}
+	echo $blade->run(ERRORFILE, $dat);
+	exit;
 }
