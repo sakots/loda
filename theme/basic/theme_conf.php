@@ -20,6 +20,8 @@ define('TH_XHTML', 0);
 
 //メインのテンプレートファイル
 define('MAINFILE', "basic_main");
+//エラー時のテンプレートファイル
+define('ERRORFILE', "basic_error");
 //その他のテンプレートファイル
 define('OTHERFILE', "basic_other");
 
